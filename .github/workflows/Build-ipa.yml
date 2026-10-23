@@ -3,13 +3,9 @@ name: Build nxnative IPA
 on:
   workflow_dispatch:
     inputs:
-      base_nsp_url:
-        description: 'Direct URL to Base Game NSP/XCI'
+      nsp_url:
+        description: 'Direct Download URL to Game NSP/XCI File'
         required: true
-        type: string
-      update_nsp_url:
-        description: 'Direct URL to Update v1.6.0 NSP (Required for BotW)'
-        required: false
         type: string
 
 jobs:
@@ -17,11 +13,10 @@ jobs:
     runs-on: macos-14 # Apple Silicon cloud runner
 
     steps:
-      - name: Checkout nxnative repository recursively
+      - name: Checkout nxnative repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -38,33 +33,27 @@ jobs:
           mkdir -p ~/keys
           echo "${{ secrets.PROD_KEYS }}" > ~/keys/prod.keys
 
-      - name: Download Game & Update Files
+      - name: Download Game File
         run: |
-          mkdir -p ~/Games/BotW
-          curl -L "${{ inputs.base_nsp_url }}" -o ~/Games/BotW/base.nsp
-          if [ -n "${{ inputs.update_nsp_url }}" ]; then
-            curl -L "${{ inputs.update_nsp_url }}" -o ~/Games/BotW/update.nsp
-          fi
-
-      - name: Regenerate Shader Translation Chain
-        env:
-          PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/dm
-        run: |
-          cd dm
-          # Regenerate translation chain headers for BotW using current compiler versions
-          python3 scripts/dmsh_chain.py --header || python3 dmsh_chain.py --header || true
+          mkdir -p ~/Games/GameFolder
+          curl -L "${{ inputs.nsp_url }}" -o ~/Games/GameFolder/game.nsp
 
       - name: Build IPA
         env:
           PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/dm
         run: |
-          # Run build_ipa_from_nsp with explicit pathing and keys
-          python3 scripts/build_ipa_from_nsp.py ~/Games/BotW -k ~/keys/prod.keys -o ~/BOTW.ipa
+          # Automatically align shader compiler hashes with the macOS runner environment
+          if [ -d "dm" ]; then
+            cd dm
+            python3 scripts/dmsh_chain.py --header || python3 dmsh_chain.py --header || true
+            cd ..
+          fi
+
+          python3 scripts/build_ipa_from_nsp.py ~/Games/GameFolder -k ~/keys/prod.keys -o ~/GameBuild.ipa
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: botw-ipa
-          path: ~/BOTW.ipa
+          name: game-ipa
+          path: ~/GameBuild.ipa
