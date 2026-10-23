@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -45,17 +46,21 @@ jobs:
             curl -L "${{ inputs.update_nsp_url }}" -o ~/Games/BotW/update.nsp
           fi
 
-      - name: Build IPA
+      - name: Regenerate Shader Translation Chain
+        env:
+          PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/dm
         run: |
-          # Locate and run dmsh_chain.py to align shader compiler versions
-          if [ -f "dm/scripts/dmsh_chain.py" ]; then
-            python3 dm/scripts/dmsh_chain.py --header
-          elif [ -f "scripts/dmsh_chain.py" ]; then
-            python3 scripts/dmsh_chain.py --header
-          elif [ -f "dm/dmsh_chain.py" ]; then
-            python3 dm/dmsh_chain.py --header
-          fi
+          cd dm
+          # Regenerate translation chain headers for BotW using current compiler versions
+          python3 scripts/dmsh_chain.py --header || python3 dmsh_chain.py --header || true
 
+      - name: Build IPA
+        env:
+          PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/dm
+        run: |
+          # Run build_ipa_from_nsp with explicit pathing and keys
           python3 scripts/build_ipa_from_nsp.py ~/Games/BotW -k ~/keys/prod.keys -o ~/BOTW.ipa
 
       - name: Upload IPA Artifact
