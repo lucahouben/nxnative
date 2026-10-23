@@ -43,13 +43,23 @@ jobs:
           PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/dm
         run: |
-          # Automatically align shader compiler hashes with the macOS runner environment
-          if [ -d "dm" ]; then
-            cd dm
-            python3 scripts/dmsh_chain.py --header || python3 dmsh_chain.py --header || true
-            cd ..
-          fi
+          # 1. Detect game Title ID from extracted NSP directory or survey
+          # 2. Force dmsh_chain.py to write dmsh_chain.h with DM_GAME set
+          
+          python3 -c "
+          import glob, re, os, subprocess
 
+          # Find game directory
+          build_dirs = glob.glob('/Users/runner/Games/GameFolder/*_build')
+          if build_dirs:
+              title_id = os.path.basename(build_dirs[0]).replace('_build', '')
+              print(f'Detected Title ID: {title_id}')
+              env = os.environ.copy()
+              env['DM_GAME'] = title_id
+              subprocess.run(['python3', 'dm/gfx/tools/dmsh_chain.py', '--header'], env=env)
+          " || true
+
+          # 3. Execute the standard build script
           python3 scripts/build_ipa_from_nsp.py ~/Games/GameFolder -k ~/keys/prod.keys -o ~/GameBuild.ipa
 
       - name: Upload IPA Artifact
