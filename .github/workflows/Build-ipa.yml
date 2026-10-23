@@ -3,23 +3,33 @@ name: Build nxnative IPA
 on:
   workflow_dispatch:
     inputs:
-      nsp_url:
-        description: 'Direct Download URL to Game NSP/XCI File'
+      base_nsp_url:
+        description: 'Direct URL to Base Game NSP/XCI'
         required: true
+        type: string
+      update_nsp_url:
+        description: 'Direct URL to Update v1.6.0 NSP (Required for BotW)'
+        required: false
         type: string
 
 jobs:
   build:
-    runs-on: macos-14 # Uses Apple Silicon (M-series) cloud runner
+    runs-on: macos-14 # Apple Silicon cloud runner
 
     steps:
-      - name: Checkout nxnative repository
+      - name: Checkout nxnative repository recursively
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Set up Homebrew & Python dependencies
         run: |
           brew install xcodegen zstd spirv-cross glslang
-          brew install --cask dotnet-sdk
           python3 -m pip install --break-system-packages lz4 capstone fonttools "backports.zstd; python_version < '3.14'"
 
       - name: Restore prod.keys from Secret
@@ -27,17 +37,22 @@ jobs:
           mkdir -p ~/keys
           echo "${{ secrets.PROD_KEYS }}" > ~/keys/prod.keys
 
-      - name: Download Game Files
+      - name: Download Game & Update Files
         run: |
-          mkdir -p ~/Games/GameFolder
-          curl -L "${{ inputs.nsp_url }}" -o ~/Games/GameFolder/game.nsp
+          mkdir -p ~/Games/BotW
+          curl -L "${{ inputs.base_nsp_url }}" -o ~/Games/BotW/base.nsp
+          if [ -n "${{ inputs.update_nsp_url }}" ]; then
+            curl -L "${{ inputs.update_nsp_url }}" -o ~/Games/BotW/update.nsp
+          fi
 
       - name: Build IPA
         run: |
-          python3 scripts/build_ipa_from_nsp.py ~/Games/GameFolder -k ~/keys/prod.keys -o ~/GameBuild.ipa
+          # Generate shader header to align compiler versions
+          python3 scripts/dmsh_chain.py --header
+          python3 scripts/build_ipa_from_nsp.py ~/Games/BotW -k ~/keys/prod.keys -o ~/BOTW.ipa
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: game-ipa
-          path: ~/GameBuild.ipa
+          name: botw-ipa
+          path: ~/BOTW.ipa
