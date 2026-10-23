@@ -47,8 +47,15 @@ jobs:
 
       - name: Build IPA
         run: |
-          # Generate shader header to align compiler versions
-          python3 scripts/dmsh_chain.py --header
+          # Locate and run dmsh_chain.py to align shader compiler versions
+          if [ -f "dm/scripts/dmsh_chain.py" ]; then
+            python3 dm/scripts/dmsh_chain.py --header
+          elif [ -f "scripts/dmsh_chain.py" ]; then
+            python3 scripts/dmsh_chain.py --header
+          elif [ -f "dm/dmsh_chain.py" ]; then
+            python3 dm/dmsh_chain.py --header
+          fi
+
           python3 scripts/build_ipa_from_nsp.py ~/Games/BotW -k ~/keys/prod.keys -o ~/BOTW.ipa
 
       - name: Upload IPA Artifact
