@@ -18,6 +18,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Clean up disk space
+        run: |
+          sudo rm -rf /Library/Developer/CommandLineTools
+          sudo rm -rf /Applications/Xcode_*.app
+          # Keep only the main Xcode 15.4 release
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
+
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -31,7 +38,14 @@ jobs:
       - name: Restore prod.keys from Secret
         run: |
           mkdir -p ~/keys
-          echo "${{ secrets.PROD_KEYS }}" > ~/keys/prod.keys
+          # Decode base64 secret to avoid newline/character corruption
+          echo "${{ secrets.PROD_KEYS_BASE64 }}" | base64 -d > ~/keys/prod.keys
+          
+          # Verify key file is not empty
+          if [ ! -s ~/keys/prod.keys ]; then
+            echo "Error: prod.keys is empty or failed to decode!"
+            exit 1
+          fi
 
       - name: Download Game File
         run: |
@@ -40,8 +54,8 @@ jobs:
 
       - name: Patch Shader Compiler Lockfile Check
         run: |
-          # Automatically rewrite the dmsh_chain.h check in own_compilers.py to auto-accept host compiler versions
           python3 -c "
+          import os
           for filepath in ['dm/gfx/tools/own_compilers.py', 'dm/gfx/tools/dmsh_build.py']:
               if os.path.exists(filepath):
                   with open(filepath, 'r') as f:
@@ -49,7 +63,11 @@ jobs:
                   content = content.replace('sys.exit(1)', 'pass # Bypass compiler lockfile check')
                   with open(filepath, 'w') as f:
                       f.write(content)
-          " || true
+          "
+
+      - name: Select Active Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
       - name: Build IPA
         env:
