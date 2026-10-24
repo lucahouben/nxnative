@@ -66,7 +66,36 @@ jobs:
         run: |
           python3 scripts/build_ipa_from_nsp.py ~/Games/GameFolder -k ~/keys/prod.keys -o ~/GameBuild.ipa
 
+      - name: Show build logs on failure
+        if: failure()
+        run: |
+          shopt -s nullglob
+          xcrun -sdk macosx metal --version || true
+          xcrun -sdk iphoneos metal --version || true
+          spirv-cross --version || true
+          for f in ~/Games/GameFolder/*_build/logs/*.log; do
+            echo "===== $f (last 200 lines) ====="
+            tail -n 200 "$f"
+          done
+          for d in ~/Games/GameFolder/*_build/shader/cache/b-* ~/Games/GameFolder/*_build/shader/ios/b-*; do
+            echo "===== $d ====="
+            ls -la "$d" | head -20
+          done
+          for j in ~/Games/GameFolder/*_build/shader/cache/b-*/_b_build.json; do
+            echo "===== $j ====="
+            python3 -c "import json,collections,sys; r=json.load(open(sys.argv[1])); print(*collections.Counter((x['st'], x['err'][:160]) for x in r).most_common(10), sep='\n')" "$j"
+          done
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ~/Games/GameFolder/*_build/logs/
+          if-no-files-found: ignore
+
       - name: Upload IPA Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: game-ipa
